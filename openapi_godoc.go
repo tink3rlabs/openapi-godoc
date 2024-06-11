@@ -1,4 +1,4 @@
-package openapi_godoc
+package openapigodoc
 
 import (
 	"encoding/json"
@@ -54,18 +54,21 @@ func walk() ([]string, error) {
 	return dirs, err
 }
 
-func GenerateOpenApiDoc(definition OpenAPIDefinition) ([]byte, error) {
-	dirs, _ := walk()
+func generate(definition OpenAPIDefinition) ([]byte, error) {
+	dirs, err := walk()
+	if err != nil {
+		return nil, fmt.Errorf("falied to list project directories: %w", err)
+	}
 	apiDefinition, err := json.Marshal(definition)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("falied marshal definition into an OpenApi document: %w", err)
 	}
 
 	for _, path := range dirs {
 		fset := token.NewFileSet()
 		d, err := parser.ParseDir(fset, path, nil, parser.ParseComments)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("falied parse documentation at path %s: %w", path, err)
 		}
 
 		for _, f := range d {
@@ -78,11 +81,11 @@ func GenerateOpenApiDoc(definition OpenAPIDefinition) ([]byte, error) {
 					def = strings.ReplaceAll(def, "\t", "  ")
 					schema, err := yaml.YAMLToJSON([]byte(def))
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("falied to convert OpenApi defnition yaml to json for struct %s: %w", t.Name, err)
 					}
 					apiDefinition, err = deepmerge.JSON(apiDefinition, schema)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("falied to merge OpenApi defnition for struct %s into OpenApi document: %w", t.Name, err)
 					}
 				}
 			}
@@ -94,15 +97,38 @@ func GenerateOpenApiDoc(definition OpenAPIDefinition) ([]byte, error) {
 					def = strings.ReplaceAll(def, "\t", "  ")
 					schema, err := yaml.YAMLToJSON([]byte(def))
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("falied to convert OpenApi defnition yaml to json for func %s: %w", f.Name, err)
 					}
 					apiDefinition, err = deepmerge.JSON(apiDefinition, schema)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("falied to merge OpenApi defnition for func %s into OpenApi document: %w", f.Name, err)
 					}
 				}
 			}
 		}
 	}
+
+	_, err = ValidateOpenApiDoc(apiDefinition)
+	if err != nil {
+		return nil, fmt.Errorf("falied to validate OpenApi document: %w", err)
+	}
 	return apiDefinition, nil
+}
+
+func ValidateOpenApiDoc(doc []byte) (bool, error) {
+	loader := openapi3.NewLoader()
+	parsed, _ := loader.LoadFromData([]byte(doc))
+	err := parsed.Validate(loader.Context)
+	if err != nil {
+		return false, fmt.Errorf("OpenApi document validation failed: %w", err)
+	}
+	return true, nil
+}
+
+func GenerateOpenApiDoc(definition OpenAPIDefinition) ([]byte, error) {
+	openApiDoc, err := generate(definition)
+	if err != nil {
+		return nil, err
+	}
+	return openApiDoc, nil
 }
