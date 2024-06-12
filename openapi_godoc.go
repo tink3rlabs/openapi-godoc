@@ -1,3 +1,7 @@
+// This package generates an [OpenAPI] document from comments in your code annotated with the @openapi keyword.
+// It currently supports only the openapi 3.x schema and not the older swagger 2 schema.
+//
+// [OpenAPI]: https://swagger.io/specification/v3/
 package openapigodoc
 
 import (
@@ -15,12 +19,23 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// Info is specified by OpenAPI standard version 3. See https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#info-object
 type Info openapi3.Info
+
+// Security https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#security-scheme-object
 type Security openapi3.SecurityRequirements
+
+// Server is specified by OpenAPI/Swagger standard version 3. See https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#server-object
 type Server openapi3.Server
+
+// Tag is specified by OpenAPI/Swagger 3.0 standard. See https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#tag-object
 type Tag openapi3.Tag
+
+// ExternalDocs is specified by OpenAPI/Swagger standard version 3. See https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#external-documentation-object
 type ExternalDocs openapi3.ExternalDocs
 
+// Components is used to add additional static definitions to the OpenAPIDefinition object
+// which are then combined with structs and funcs decorated with @openapi comments
 type Components struct {
 	Schemas         map[string]interface{} `json:"schemas,omitempty" yaml:"schemas,omitempty"`
 	Parameters      map[string]interface{} `json:"parameters,omitempty" yaml:"parameters,omitempty"`
@@ -33,6 +48,7 @@ type Components struct {
 	Callbacks       map[string]interface{} `json:"callbacks,omitempty" yaml:"callbacks,omitempty"`
 }
 
+// OpenAPIDefinition is used to define general properties of an API which is then combined with other definitions to generate an OpenAPI document
 type OpenAPIDefinition struct {
 	OpenAPI      string       `json:"openapi" yaml:"openapi"`
 	Info         Info         `json:"info" yaml:"info"`
@@ -43,6 +59,7 @@ type OpenAPIDefinition struct {
 	Components   Components   `json:"components,omitempty" yaml:"components,omitempty"`
 }
 
+// walk returns an array of directory names to scan when looking for go files with comments
 func walk() ([]string, error) {
 	dirs := []string{"./"}
 	err := filepath.WalkDir("./", func(path string, d fs.DirEntry, err error) error {
@@ -54,6 +71,7 @@ func walk() ([]string, error) {
 	return dirs, err
 }
 
+// generate generates the OpenAPI definition
 func generate(definition OpenAPIDefinition) ([]byte, error) {
 	dirs, err := walk()
 	if err != nil {
@@ -115,6 +133,7 @@ func generate(definition OpenAPIDefinition) ([]byte, error) {
 	return apiDefinition, nil
 }
 
+// ValidateOpenApiDoc validates a document conforms to the OpenAPI 3 specification
 func ValidateOpenApiDoc(doc []byte) (bool, error) {
 	loader := openapi3.NewLoader()
 	parsed, _ := loader.LoadFromData([]byte(doc))
@@ -125,6 +144,9 @@ func ValidateOpenApiDoc(doc []byte) (bool, error) {
 	return true, nil
 }
 
+// GenerateOpenApiDoc parses all struct and func comments decorated with the @openapi keyword
+// as well as any static definitions added directly to the OpenAPIDefinition object and generates an
+// OpenAPI document that conforms to the OpenAPI 3 specification
 func GenerateOpenApiDoc(definition OpenAPIDefinition) ([]byte, error) {
 	openApiDoc, err := generate(definition)
 	if err != nil {
