@@ -75,18 +75,18 @@ func walk() ([]string, error) {
 func generate(definition OpenAPIDefinition) ([]byte, error) {
 	dirs, err := walk()
 	if err != nil {
-		return nil, fmt.Errorf("falied to list project directories: %w", err)
+		return nil, fmt.Errorf("failed to list project directories: %w", err)
 	}
 	apiDefinition, err := json.Marshal(definition)
 	if err != nil {
-		return nil, fmt.Errorf("falied marshal definition into an OpenApi document: %w", err)
+		return nil, fmt.Errorf("failed marshal definition into an OpenApi document: %w", err)
 	}
 
 	for _, path := range dirs {
 		fset := token.NewFileSet()
 		d, err := parser.ParseDir(fset, path, nil, parser.ParseComments)
 		if err != nil {
-			return nil, fmt.Errorf("falied parse documentation at path %s: %w", path, err)
+			return nil, fmt.Errorf("failed parse documentation at path %s: %w", path, err)
 		}
 
 		for _, f := range d {
@@ -99,11 +99,11 @@ func generate(definition OpenAPIDefinition) ([]byte, error) {
 					def = strings.ReplaceAll(def, "\t", "  ")
 					schema, err := yaml.YAMLToJSON([]byte(def))
 					if err != nil {
-						return nil, fmt.Errorf("falied to convert OpenApi defnition yaml to json for struct %s: %w", t.Name, err)
+						return nil, fmt.Errorf("failed to convert OpenApi defnition yaml to json for struct %s: %w", t.Name, err)
 					}
 					apiDefinition, err = deepmerge.JSON(apiDefinition, schema)
 					if err != nil {
-						return nil, fmt.Errorf("falied to merge OpenApi defnition for struct %s into OpenApi document: %w", t.Name, err)
+						return nil, fmt.Errorf("failed to merge OpenApi defnition for struct %s into OpenApi document: %w", t.Name, err)
 					}
 				}
 			}
@@ -115,11 +115,11 @@ func generate(definition OpenAPIDefinition) ([]byte, error) {
 					def = strings.ReplaceAll(def, "\t", "  ")
 					schema, err := yaml.YAMLToJSON([]byte(def))
 					if err != nil {
-						return nil, fmt.Errorf("falied to convert OpenApi defnition yaml to json for func %s: %w", f.Name, err)
+						return nil, fmt.Errorf("failed to convert OpenApi defnition yaml to json for func %s: %w", f.Name, err)
 					}
 					apiDefinition, err = deepmerge.JSON(apiDefinition, schema)
 					if err != nil {
-						return nil, fmt.Errorf("falied to merge OpenApi defnition for func %s into OpenApi document: %w", f.Name, err)
+						return nil, fmt.Errorf("failed to merge OpenApi defnition for func %s into OpenApi document: %w", f.Name, err)
 					}
 				}
 			}
@@ -128,7 +128,7 @@ func generate(definition OpenAPIDefinition) ([]byte, error) {
 
 	_, err = ValidateOpenApiDoc(apiDefinition)
 	if err != nil {
-		return nil, fmt.Errorf("falied to validate OpenApi document: %w", err)
+		return nil, fmt.Errorf("failed to validate OpenApi document: %w", err)
 	}
 	return apiDefinition, nil
 }

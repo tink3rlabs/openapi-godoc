@@ -6,6 +6,15 @@
 	"image": "mcr.microsoft.com/devcontainers/go:1-1.22-bookworm",
 	"features": {
 		"ghcr.io/devcontainers/features/go:1": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"streetsidesoftware.code-spell-checker",
+				"golang.go",
+				"DavidAnson.vscode-markdownlint"
+			]
+		}
 	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
