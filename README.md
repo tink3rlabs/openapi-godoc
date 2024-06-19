@@ -204,11 +204,11 @@ func main() {
 
 ## Contributing
 
-Please see [CONTRIBUTING](https://github.com/tink3rlabs/openapi-godoc/master/CONTRIBUTING.md). Thank you, contributors!
+Please see [CONTRIBUTING](https://github.com/tink3rlabs/openapi-godoc/blob/main/CONTRIBUTING.md). Thank you, contributors!
 
 ## License
 
-Released under the [MIT License](https://github.com/tink3rlabs/openapi-godoc/master/LICENSE)
+Released under the [MIT License](https://github.com/tink3rlabs/openapi-godoc/blob/main/LICENSE)
 
 ## Credits
 
