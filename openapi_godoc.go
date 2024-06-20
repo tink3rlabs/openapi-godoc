@@ -71,8 +71,26 @@ func walk() ([]string, error) {
 	return dirs, err
 }
 
+// parseAndMergeComment parses a comment to extract OpenAPI definitions and merges it with an input definition
+func parseAndMergeComment(definition []byte, comment string) ([]byte, error) {
+	firstWord := strings.Split(comment, "\n")[0]
+	if firstWord == "@openapi" {
+		def := strings.Replace(comment, firstWord, "", 1)
+		def = strings.ReplaceAll(def, "\t", "  ")
+		schema, err := yaml.YAMLToJSON([]byte(def))
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert comment yaml to json: %w", err)
+		}
+		definition, err = deepmerge.JSON(definition, schema)
+		if err != nil {
+			return nil, fmt.Errorf("failed to merge parsed comment to OpenAPI defnition: %w", err)
+		}
+	}
+	return definition, nil
+}
+
 // generate generates the OpenAPI definition
-func generate(definition OpenAPIDefinition) ([]byte, error) {
+func generate(definition OpenAPIDefinition, validate bool) ([]byte, error) {
 	dirs, err := walk()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list project directories: %w", err)
@@ -93,42 +111,32 @@ func generate(definition OpenAPIDefinition) ([]byte, error) {
 			p := doc.New(f, "./", 2)
 
 			for _, t := range p.Types {
-				firstWord := strings.Split(t.Doc, "\n")[0]
-				if firstWord == "@openapi" {
-					def := strings.Replace(t.Doc, firstWord, "", 1)
-					def = strings.ReplaceAll(def, "\t", "  ")
-					schema, err := yaml.YAMLToJSON([]byte(def))
+				apiDefinition, err = parseAndMergeComment(apiDefinition, t.Doc)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse OpenApi defnition for struct %s into OpenApi document: %w", t.Name, err)
+				}
+				for _, m := range t.Methods {
+					apiDefinition, err = parseAndMergeComment(apiDefinition, m.Doc)
 					if err != nil {
-						return nil, fmt.Errorf("failed to convert OpenApi defnition yaml to json for struct %s: %w", t.Name, err)
-					}
-					apiDefinition, err = deepmerge.JSON(apiDefinition, schema)
-					if err != nil {
-						return nil, fmt.Errorf("failed to merge OpenApi defnition for struct %s into OpenApi document: %w", t.Name, err)
+						return nil, fmt.Errorf("failed to parse OpenApi defnition for method %s of struct %s into OpenApi document: %w", m.Name, t.Name, err)
 					}
 				}
 			}
 
 			for _, f := range p.Funcs {
-				firstWord := strings.Split(f.Doc, "\n")[0]
-				if firstWord == "@openapi" {
-					def := strings.Replace(f.Doc, firstWord, "", 1)
-					def = strings.ReplaceAll(def, "\t", "  ")
-					schema, err := yaml.YAMLToJSON([]byte(def))
-					if err != nil {
-						return nil, fmt.Errorf("failed to convert OpenApi defnition yaml to json for func %s: %w", f.Name, err)
-					}
-					apiDefinition, err = deepmerge.JSON(apiDefinition, schema)
-					if err != nil {
-						return nil, fmt.Errorf("failed to merge OpenApi defnition for func %s into OpenApi document: %w", f.Name, err)
-					}
+				apiDefinition, err = parseAndMergeComment(apiDefinition, f.Doc)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse OpenApi defnition for func %s into OpenApi document: %w", f.Name, err)
 				}
 			}
 		}
 	}
 
-	_, err = ValidateOpenApiDoc(apiDefinition)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate OpenApi document: %w", err)
+	if validate {
+		_, err = ValidateOpenApiDoc(apiDefinition)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate OpenApi document: %w", err)
+		}
 	}
 	return apiDefinition, nil
 }
@@ -147,8 +155,8 @@ func ValidateOpenApiDoc(doc []byte) (bool, error) {
 // GenerateOpenApiDoc parses all struct and func comments decorated with the @openapi keyword
 // as well as any static definitions added directly to the OpenAPIDefinition object and generates an
 // OpenAPI document that conforms to the OpenAPI 3 specification
-func GenerateOpenApiDoc(definition OpenAPIDefinition) ([]byte, error) {
-	openApiDoc, err := generate(definition)
+func GenerateOpenApiDoc(definition OpenAPIDefinition, validate bool) ([]byte, error) {
+	openApiDoc, err := generate(definition, validate)
 	if err != nil {
 		return nil, err
 	}

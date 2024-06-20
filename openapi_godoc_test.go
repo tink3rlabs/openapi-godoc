@@ -98,7 +98,7 @@ func TestGenerateError(t *testing.T) {
 	def := OpenAPIDefinition{}
 	expectedResult := []byte{}
 	expectedErr := "failed to validate OpenApi document: OpenApi document validation failed: value of openapi must be a non-empty string"
-	actualResult, actualErr := GenerateOpenApiDoc(def)
+	actualResult, actualErr := GenerateOpenApiDoc(def, true)
 
 	if actualErr.Error() != expectedErr {
 		t.Errorf("Error actual = %v, and Expected = %v.", actualErr, expectedErr)
@@ -126,7 +126,7 @@ func TestGenerate(t *testing.T) {
 		ExternalDocs: ExternalDocs{Description: "Find out more", URL: "http://example.com"},
 	}
 	expectedResult := []byte(`{"components":{"responses":{"NotFound":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}},"description":"The specified resource was not found"},"Unauthorized":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}},"description":"Unauthorized"}},"schemas":{"Error":{"properties":{"error":{"type":"string"},"status":{"type":"string"}},"type":"object"},"Message":{"properties":{"content":{"description":"The contents of a message","example":"Hello world!","type":"string"}},"type":"object"}}},"externalDocs":{"description":"Find out more","url":"http://example.com"},"info":{"description":"A hello world API","title":"Hello API","version":"1.0.0"},"openapi":"3.0.0","paths":{"/":{"get":{"description":"Returns a hello message","operationId":"sayHello","responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Message"}}},"description":"successful operation"}},"summary":"Say Hello","tags":["hello"]}}},"servers":[{"url":"http://localhost:8080"}],"tags":[{"description":"hello related apis","name":"hello"}]}`)
-	actualResult, actualErr := GenerateOpenApiDoc(def)
+	actualResult, actualErr := GenerateOpenApiDoc(def, true)
 
 	if actualErr != nil {
 		t.Errorf("Error actual = %v, and Expected = %v.", actualErr, nil)
