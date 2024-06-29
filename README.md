@@ -3,6 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/tink3rlabs/openapi-godoc)](https://goreportcard.com/report/github.com/tink3rlabs/openapi-godoc)
 [![Go Reference](https://pkg.go.dev/badge/github.com/tink3rlabs/openapi-godoc.svg)](https://pkg.go.dev/github.com/tink3rlabs/openapi-godoc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Lint and Test](https://github.com/tink3rlabs/openapi-godoc/actions/workflows/build.yml/badge.svg)](https://github.com/tink3rlabs/openapi-godoc/actions/workflows/lint_and_test.yml)
 
 This package generates an [OpenAPI](https://swagger.io/specification/v3/) document from comments in your code annotated with the `@openapi` keyword. It currently supports only the openapi 3.x schema and not the older swagger 2 schema.
 
