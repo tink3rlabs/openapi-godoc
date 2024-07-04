@@ -13,12 +13,6 @@ defaults:
 jobs:
   conventional-commits:
     runs-on: ubuntu-latest
-    # permissions:
-    #  actions: read
-    #  contents: write
-    #  issues: read
-    #  packages: write
-    #  pull-requests: read
     steps:
      - name: Conventional Commits
        uses: webiny/action-conventional-commits@v1.3.0
