@@ -24,5 +24,8 @@ jobs:
       - uses: go-semantic-release/action@v1
         with:
           hooks: goreleaser
+          changelog-file: CHANGELOG.md
+          allow-initial-development-versions: true
+          prepend: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
