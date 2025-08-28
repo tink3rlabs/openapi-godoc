@@ -1,9 +1,9 @@
 module github.com/tink3rlabs/openapi-godoc
 
-go 1.22.4
+go 1.23.3
 
 require (
-	github.com/TwiN/deepmerge v0.2.1
+	github.com/TwiN/deepmerge v0.2.2
 	github.com/getkin/kin-openapi v0.124.0
 	sigs.k8s.io/yaml v1.6.0
 )
