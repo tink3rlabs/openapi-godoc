@@ -7,10 +7,11 @@ package openapigodoc
 import (
 	"encoding/json"
 	"fmt"
-	"go/doc"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -71,6 +72,66 @@ func walk() ([]string, error) {
 	return dirs, err
 }
 
+// docComment pairs a declaration's name with its doc comment text.
+type docComment struct {
+	name string
+	text string
+}
+
+// docComments parses every Go file in a single directory (non-recursively) and
+// returns the doc comments attached to exported types and to every exported
+// function or method (regardless of its receiver type's visibility) — the
+// declarations that may carry an @openapi annotation. It reads the AST
+// directly, replacing the parser.ParseDir/doc.New pair (both deprecated as of
+// Go 1.25) while still covering declarations in _test.go files, which
+// doc.NewFromFiles would otherwise skip.
+func docComments(path string) ([]docComment, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+
+	fset := token.NewFileSet()
+	var comments []docComment
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(path, entry.Name()), nil, parser.ParseComments)
+		if err != nil {
+			return nil, err
+		}
+		for _, decl := range f.Decls {
+			switch d := decl.(type) {
+			case *ast.FuncDecl:
+				if d.Name.IsExported() && d.Doc != nil {
+					comments = append(comments, docComment{d.Name.Name, d.Doc.Text()})
+				}
+			case *ast.GenDecl:
+				if d.Tok != token.TYPE {
+					continue
+				}
+				for _, spec := range d.Specs {
+					ts, ok := spec.(*ast.TypeSpec)
+					if !ok || !ts.Name.IsExported() {
+						continue
+					}
+					// The doc comment attaches to the spec for grouped
+					// declarations and to the GenDecl for single ones.
+					group := ts.Doc
+					if group == nil {
+						group = d.Doc
+					}
+					if group != nil {
+						comments = append(comments, docComment{ts.Name.Name, group.Text()})
+					}
+				}
+			}
+		}
+	}
+	return comments, nil
+}
+
 // parseAndMergeComment parses a comment to extract OpenAPI definitions and merges it with an input definition
 func parseAndMergeComment(definition []byte, comment string) ([]byte, error) {
 	firstWord := strings.Split(comment, "\n")[0]
@@ -101,33 +162,15 @@ func generate(definition OpenAPIDefinition, validate bool) ([]byte, error) {
 	}
 
 	for _, path := range dirs {
-		fset := token.NewFileSet()
-		d, err := parser.ParseDir(fset, path, nil, parser.ParseComments)
+		comments, err := docComments(path)
 		if err != nil {
 			return nil, fmt.Errorf("failed parse documentation at path %s: %w", path, err)
 		}
 
-		for _, f := range d {
-			p := doc.New(f, "./", 2)
-
-			for _, t := range p.Types {
-				apiDefinition, err = parseAndMergeComment(apiDefinition, t.Doc)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse OpenApi defnition for struct %s into OpenApi document: %w", t.Name, err)
-				}
-				for _, m := range t.Methods {
-					apiDefinition, err = parseAndMergeComment(apiDefinition, m.Doc)
-					if err != nil {
-						return nil, fmt.Errorf("failed to parse OpenApi defnition for method %s of struct %s into OpenApi document: %w", m.Name, t.Name, err)
-					}
-				}
-			}
-
-			for _, f := range p.Funcs {
-				apiDefinition, err = parseAndMergeComment(apiDefinition, f.Doc)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse OpenApi defnition for func %s into OpenApi document: %w", f.Name, err)
-				}
+		for _, c := range comments {
+			apiDefinition, err = parseAndMergeComment(apiDefinition, c.text)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse OpenApi defnition for %s into OpenApi document: %w", c.name, err)
 			}
 		}
 	}
