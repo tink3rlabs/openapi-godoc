@@ -7,7 +7,6 @@ package openapigodoc
 import (
 	"encoding/json"
 	"fmt"
-	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -72,27 +71,33 @@ func walk() ([]string, error) {
 	return dirs, err
 }
 
-// docComment pairs a declaration's name with its doc comment text.
-type docComment struct {
-	name string
-	text string
+// openapiBlock is a single @openapi YAML body plus a position string for
+// error context. The position is the file:line of the comment group the
+// block was extracted from.
+type openapiBlock struct {
+	pos  string
+	body string
 }
 
-// docComments parses every Go file in a single directory (non-recursively) and
-// returns the doc comments attached to exported types and to every exported
-// function or method (regardless of its receiver type's visibility) — the
-// declarations that may carry an @openapi annotation. It reads the AST
-// directly, replacing the parser.ParseDir/doc.New pair (both deprecated as of
-// Go 1.25) while still covering declarations in _test.go files, which
-// doc.NewFromFiles would otherwise skip.
-func docComments(path string) ([]docComment, error) {
+// openapiBlocks parses every Go file in a single directory (non-recursively)
+// and returns every @openapi block found in any comment group — godoc on
+// declarations, free-standing file-level comments, and inline comments alike.
+// A block starts at a comment line whose trimmed text equals "@openapi" and
+// extends until the next such line in the same comment group, or end of group.
+//
+// Walking f.Comments directly (rather than doc.Package's Types/Methods/Funcs
+// view) lifts two artificial constraints: godoc and @openapi can coexist on
+// the same declaration, and an operation can be declared without a host
+// func — useful when multiple routes (e.g. nested router mounts, aliases,
+// versioned mirrors) share a single handler.
+func openapiBlocks(path string) ([]openapiBlock, error) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
 
 	fset := token.NewFileSet()
-	var comments []docComment
+	var blocks []openapiBlock
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
 			continue
@@ -101,51 +106,73 @@ func docComments(path string) ([]docComment, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, decl := range f.Decls {
-			switch d := decl.(type) {
-			case *ast.FuncDecl:
-				if d.Name.IsExported() && d.Doc != nil {
-					comments = append(comments, docComment{d.Name.Name, d.Doc.Text()})
-				}
-			case *ast.GenDecl:
-				if d.Tok != token.TYPE {
-					continue
-				}
-				for _, spec := range d.Specs {
-					ts, ok := spec.(*ast.TypeSpec)
-					if !ok || !ts.Name.IsExported() {
-						continue
-					}
-					// The doc comment attaches to the spec for grouped
-					// declarations and to the GenDecl for single ones.
-					group := ts.Doc
-					if group == nil {
-						group = d.Doc
-					}
-					if group != nil {
-						comments = append(comments, docComment{ts.Name.Name, group.Text()})
-					}
-				}
+		for _, group := range f.Comments {
+			groupPos := fset.Position(group.Pos())
+			for _, eb := range extractBlocks(group.Text()) {
+				blocks = append(blocks, openapiBlock{
+					pos:  fmt.Sprintf("%s:%d", groupPos.Filename, groupPos.Line+eb.lineOffset),
+					body: eb.body,
+				})
 			}
 		}
 	}
-	return comments, nil
+	return blocks, nil
 }
 
-// parseAndMergeComment parses a comment to extract OpenAPI definitions and merges it with an input definition
-func parseAndMergeComment(definition []byte, comment string) ([]byte, error) {
-	firstWord := strings.Split(comment, "\n")[0]
-	if firstWord == "@openapi" {
-		def := strings.Replace(comment, firstWord, "", 1)
-		def = strings.ReplaceAll(def, "\t", "  ")
-		schema, err := yaml.YAMLToJSON([]byte(def))
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert comment yaml to json: %w", err)
+// extractedBlock is the raw output of scanning one comment group's text: the
+// YAML body plus the line offset of the @openapi marker within the scanned
+// text. openapiBlocks turns the offset into an absolute file:line so
+// YAML/merge errors locate the right block in a multi-block group.
+type extractedBlock struct {
+	lineOffset int
+	body       string
+}
+
+// extractBlocks splits a comment group's text into @openapi YAML bodies.
+// A block starts at any line whose trimmed text equals "@openapi" and runs
+// until the next such marker in the same text or end of text. The marker
+// line is discarded; YAML indentation in body lines is preserved.
+//
+// Operates on *ast.CommentGroup.Text() output (comment markers stripped,
+// blank lines normalized). lineOffset is therefore an approximate source
+// line — leading/interior blank comment lines that Text() collapses can
+// shift it slightly earlier than the literal marker line. The file and
+// group are exact; the offset is good enough to scroll to. Pure and
+// side-effect-free.
+func extractBlocks(text string) []extractedBlock {
+	lines := strings.Split(text, "\n")
+	var out []extractedBlock
+	i := 0
+	for i < len(lines) {
+		if strings.TrimSpace(lines[i]) != "@openapi" {
+			i++
+			continue
 		}
-		definition, err = deepmerge.JSON(definition, schema)
-		if err != nil {
-			return nil, fmt.Errorf("failed to merge parsed comment to OpenAPI defnition: %w", err)
+		marker := i
+		i++ // skip marker line
+		start := i
+		for i < len(lines) && strings.TrimSpace(lines[i]) != "@openapi" {
+			i++
 		}
+		out = append(out, extractedBlock{
+			lineOffset: marker,
+			body:       strings.Join(lines[start:i], "\n"),
+		})
+	}
+	return out
+}
+
+// parseAndMergeComment converts one @openapi YAML body to JSON and deep-merges
+// it into the running OpenAPI definition.
+func parseAndMergeComment(definition []byte, block openapiBlock) ([]byte, error) {
+	body := strings.ReplaceAll(block.body, "\t", "  ")
+	schema, err := yaml.YAMLToJSON([]byte(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert comment yaml to json: %w", err)
+	}
+	definition, err = deepmerge.JSON(definition, schema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge parsed comment to OpenAPI definition: %w", err)
 	}
 	return definition, nil
 }
@@ -162,15 +189,15 @@ func generate(definition OpenAPIDefinition, validate bool) ([]byte, error) {
 	}
 
 	for _, path := range dirs {
-		comments, err := docComments(path)
+		blocks, err := openapiBlocks(path)
 		if err != nil {
 			return nil, fmt.Errorf("failed parse documentation at path %s: %w", path, err)
 		}
 
-		for _, c := range comments {
-			apiDefinition, err = parseAndMergeComment(apiDefinition, c.text)
+		for _, b := range blocks {
+			apiDefinition, err = parseAndMergeComment(apiDefinition, b)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse OpenApi defnition for %s into OpenApi document: %w", c.name, err)
+				return nil, fmt.Errorf("failed to parse OpenApi definition at %s into OpenApi document: %w", b.pos, err)
 			}
 		}
 	}
