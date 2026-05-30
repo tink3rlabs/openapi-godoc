@@ -9,9 +9,28 @@ This package generates an [OpenAPI](https://swagger.io/specification/v3/) docume
 
 ## Goals
 
-openapi-godoc enables you to integrate OpenAPI using comments in your code. Just add the `@openapi` keyword at the top of a `struct` or `func` declaration and describe the given API part in YAML syntax. It's also possible to pass JSON snippets directly outside the annotated source code.
+openapi-godoc enables you to integrate OpenAPI using comments in your code. Add an `@openapi` line inside any Go comment and describe the given API part in YAML syntax beneath it. It's also possible to pass JSON snippets directly outside the annotated source code.
 
 openapi-godoc will then parse the comments and output an OpenAPI document describing your API, allowing you to keep your API documentation as close as possible to your code thus maximizing the likelihood it stays up to date when your code changes.
+
+### Where `@openapi` blocks can live
+
+`@openapi` is matched by line-start, so blocks can appear:
+
+- on a `struct` or `func` declaration, either as the first line of the doc comment or after one or more regular godoc lines (`// MyFn does X.\n//\n// @openapi\n// …`)
+- in a **free-standing** comment group not attached to any declaration — useful for documenting routes whose handler lives in another package, or for grouping schema-only definitions. Anchor a free-standing group with `const _ = 0` (or any other decl) so Go doesn't reattach it to the next declaration:
+
+  ```go
+  // @openapi
+  // paths:
+  //   /health:
+  //     get: { responses: { '200': { description: ok } } }
+
+  // _ keeps the @openapi block above as its own free-standing comment group.
+  const _ = 0
+  ```
+
+- **multiple times** in a single comment group — each `@openapi` line starts a new block, and the body runs until the next `@openapi` line or the end of the group.
 
 ## Non-goals
 
