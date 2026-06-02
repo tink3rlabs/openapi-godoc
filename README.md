@@ -18,7 +18,7 @@ openapi-godoc will then parse the comments and output an OpenAPI document descri
 `@openapi` is matched by line-start, so blocks can appear:
 
 - on a `struct` or `func` declaration, either as the first line of the doc comment or after one or more regular godoc lines (`// MyFn does X.\n//\n// @openapi\n// …`)
-- in a **free-standing** comment group not attached to any declaration — useful for documenting routes whose handler lives in another package, or for grouping schema-only definitions. Anchor a free-standing group with `const _ = 0` (or any other decl) so Go doesn't reattach it to the next declaration:
+- in a **free-standing** comment group not attached to any declaration — useful for documenting routes whose handler lives in another package, or for grouping schema-only definitions. No special anchor is required: the parser scans every comment group in the file, so the block is picked up whether or not it attaches to a following declaration. Just leave a blank line between the block and the next declaration so the YAML doesn't become that declaration's godoc:
 
   ```go
   // @openapi
@@ -26,11 +26,19 @@ openapi-godoc will then parse the comments and output an OpenAPI document descri
   //   /health:
   //     get: { responses: { '200': { description: ok } } }
 
-  // _ keeps the @openapi block above as its own free-standing comment group.
-  const _ = 0
+  // Health reports liveness. The blank line above keeps the @openapi block
+  // as its own comment group instead of this function's doc comment.
+  func Health() {}
   ```
 
 - **multiple times** in a single comment group — each `@openapi` line starts a new block, and the body runs until the next `@openapi` line or the end of the group.
+
+### Matching rules and caveats
+
+- A marker is a comment line whose **trimmed text is exactly** `@openapi`. Mid-line occurrences (e.g. `// see @openapi for details`) are ignored, so prose that mentions the keyword is safe.
+- **Every** comment group in **every** `.go` file under the scanned paths is searched — including `_test.go` files and comments inside function bodies. Keep stray `@openapi` lines out of test and example files unless you intend them to land in the generated spec.
+- A block's body runs from the marker line to the next `@openapi` marker in the same group, or the end of the group. Blank lines inside a body are preserved, so multi-line YAML works.
+- Parsing is **fail-fast**: a single malformed `@openapi` block anywhere aborts generation. The error names the offending `file:line` so you can jump straight to it.
 
 ## Non-goals
 
