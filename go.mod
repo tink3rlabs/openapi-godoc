@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/TwiN/deepmerge v0.2.2
-	github.com/getkin/kin-openapi v0.149.0
+	github.com/getkin/kin-openapi v0.151.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
